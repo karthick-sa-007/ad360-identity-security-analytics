@@ -8,4 +8,3 @@ flask==3.0.2
 mcp>=1.0.0
 fpdf2==2.7.9
 streamlit-extras
-flask==3.0.2

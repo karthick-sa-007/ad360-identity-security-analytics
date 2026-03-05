@@ -1,203 +1,184 @@
 """
-mcp_server.py — MCP-compatible HTTP server exposing AD360 analytics as REST endpoints.
+mcp_server.py — MCP (Model Context Protocol) server for AD360 iSOC.
 
-Run with:
-    python mcp_server.py
-
-The server listens on port 8090 by default.
+Exposes 15 identity-security tools via the official MCP Python SDK using
+stdio transport. Connect this server to any MCP-compatible AI assistant.
 """
 
+import asyncio
+import json
 import logging
-from dataclasses import asdict
 from typing import Any
 
-from flask import Flask, jsonify, request
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Tool, TextContent
 
 from ad360_client import AD360Client
 from analytics import (
-    calculate_security_score,
-    get_compliance_summary,
+    calculate_itdr_score,
+    detect_attack_patterns,
+    get_mitre_attack_coverage,
+    calculate_zero_trust_score,
     get_high_risk_users,
-    get_identity_summary,
+    get_compliance_summary,
 )
 from alerts import AlertsEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-
-# Shared client instance (uses mock data by default)
+app = Server("ad360-isoc")
 _client = AD360Client()
-_alerts_engine = AlertsEngine()
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
-
-def _ok(data: Any) -> Any:
-    """Wrap a payload in a standard success envelope."""
-    return jsonify({"status": "ok", "data": data})
 
 
-# ---------------------------------------------------------------------------
-# Tool discovery
-# ---------------------------------------------------------------------------
+def _json(data: Any) -> str:
+    return json.dumps(data, indent=2, default=str)
+
+
+# ── Tool definitions ──────────────────────────────────────────────────────────
 
 TOOLS = [
-    {
-        "name": "get_identity_security_score",
-        "method": "POST",
-        "path": "/tools/get_identity_security_score",
-        "description": "Returns the overall identity security score, grade, and per-category breakdown.",
-    },
-    {
-        "name": "get_high_risk_users",
-        "method": "POST",
-        "path": "/tools/get_high_risk_users",
-        "description": "Returns the top 10 highest-risk users with risk scores and contributing factors.",
-    },
-    {
-        "name": "get_active_alerts",
-        "method": "POST",
-        "path": "/tools/get_active_alerts",
-        "description": "Returns all currently triggered security alerts with remediation guidance.",
-    },
-    {
-        "name": "get_compliance_summary",
-        "method": "POST",
-        "path": "/tools/get_compliance_summary",
-        "description": "Returns GDPR, HIPAA, and PCI-DSS compliance readiness percentages.",
-    },
-    {
-        "name": "get_domain_overview",
-        "method": "POST",
-        "path": "/tools/get_domain_overview",
-        "description": "Returns domain statistics (total users, active, disabled, locked, admin counts).",
-    },
-    {
-        "name": "get_failed_logins",
-        "method": "POST",
-        "path": "/tools/get_failed_logins",
-        "description": "Returns the list of recent failed-login events.",
-    },
-    {
-        "name": "get_privilege_changes",
-        "method": "POST",
-        "path": "/tools/get_privilege_changes",
-        "description": "Returns recent privilege-change events.",
-    },
-    {
-        "name": "get_inactive_users",
-        "method": "POST",
-        "path": "/tools/get_inactive_users",
-        "description": "Returns the list of inactive user accounts.",
-    },
+    Tool(
+        name="get_identity_security_score",
+        description="Get the overall ITDR (Identity Threat Detection & Response) security score with breakdown by risk category.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_active_alerts",
+        description="Get all active security alerts sorted by severity (Critical → Low) with MITRE ATT&CK technique IDs and remediation steps.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_high_risk_users",
+        description="Get the top 10 highest-risk users with risk scores, factors, and last activity timestamps.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_impossible_travel_alerts",
+        description="Get impossible-travel detections where users authenticated from geographically impossible locations.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_compliance_summary",
+        description="Get compliance scores for all 7 frameworks: GDPR, HIPAA, SOX, PCI_DSS, ISO_27001, NIST_800_53, CIS_AD.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_domain_overview",
+        description="Get Active Directory domain statistics: user counts, DC count, GPO count, trust relationships, privileged groups.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_failed_logins",
+        description="Get recent failed login events with username, IP, location, device type, and attack pattern classification.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_lateral_movement",
+        description="Get lateral movement detections with source/target systems, MITRE technique IDs, and risk scores.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_shadow_admins",
+        description="Get shadow admin accounts that have indirect administrative control over Active Directory.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_orphaned_accounts",
+        description="Get orphaned accounts where the manager has left the organisation but the account remains active.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_privileged_inventory",
+        description="Get the privileged account inventory with MFA status, dormancy, password age, and review status.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_jml_status",
+        description="Get Joiner/Mover/Leaver process status including overdue items and access provisioning state.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_mitre_coverage",
+        description="Get the MITRE ATT&CK technique coverage map showing active threats mapped to ATT&CK techniques.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_zero_trust_score",
+        description="Get the Zero Trust readiness score across 5 pillars: Identity, Device, Network, Application, Data.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    Tool(
+        name="get_executive_summary",
+        description="Get the CISO executive summary with health score, top risks, compliance average, incident counts, and MTTR.",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
 ]
 
 
-@app.get("/tools")
-def list_tools():
-    """List all available MCP tools."""
-    return _ok(TOOLS)
+@app.list_tools()
+async def list_tools() -> list[Tool]:
+    return TOOLS
 
 
-# ---------------------------------------------------------------------------
-# Tool endpoints
-# ---------------------------------------------------------------------------
-
-@app.post("/tools/get_identity_security_score")
-def tool_identity_security_score():
-    """Return security score + grade."""
+@app.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     try:
-        result = calculate_security_score(_client)
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_identity_security_score")
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        if name == "get_identity_security_score":
+            result = calculate_itdr_score(_client)
+        elif name == "get_active_alerts":
+            alerts = AlertsEngine().evaluate_all(_client)
+            result = [
+                {
+                    "name": a.name,
+                    "severity": a.severity,
+                    "message": a.message,
+                    "mitre_technique_id": a.mitre_technique_id,
+                    "remediation": a.remediation,
+                }
+                for a in alerts
+            ]
+        elif name == "get_high_risk_users":
+            result = get_high_risk_users(_client)
+        elif name == "get_impossible_travel_alerts":
+            result = _client.get_impossible_travel_alerts()
+        elif name == "get_compliance_summary":
+            result = get_compliance_summary(_client)
+        elif name == "get_domain_overview":
+            result = _client.get_domain_overview()
+        elif name == "get_failed_logins":
+            result = _client.get_failed_logins()
+        elif name == "get_lateral_movement":
+            result = _client.get_lateral_movement()
+        elif name == "get_shadow_admins":
+            result = _client.get_shadow_admins()
+        elif name == "get_orphaned_accounts":
+            result = _client.get_orphaned_accounts()
+        elif name == "get_privileged_inventory":
+            result = _client.get_privileged_account_inventory()
+        elif name == "get_jml_status":
+            result = _client.get_joiners_movers_leavers()
+        elif name == "get_mitre_coverage":
+            result = get_mitre_attack_coverage(_client)
+        elif name == "get_zero_trust_score":
+            result = calculate_zero_trust_score(_client)
+        elif name == "get_executive_summary":
+            result = _client.get_executive_summary()
+        else:
+            result = {"error": f"Unknown tool: {name}"}
+
+        return [TextContent(type="text", text=_json(result))]
+
+    except Exception as exc:
+        logger.error("Tool %s failed: %s", name, exc)
+        return [TextContent(type="text", text=_json({"error": str(exc)}))]
 
 
-@app.post("/tools/get_high_risk_users")
-def tool_high_risk_users():
-    """Return top risky users."""
-    try:
-        result = get_high_risk_users(_client)
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_high_risk_users")
-        return jsonify({"status": "error", "message": str(exc)}), 500
+async def main() -> None:
+    async with stdio_server() as (read_stream, write_stream):
+        await app.run(read_stream, write_stream, app.create_initialization_options())
 
-
-@app.post("/tools/get_active_alerts")
-def tool_active_alerts():
-    """Return all triggered alerts."""
-    try:
-        alerts = _alerts_engine.evaluate_all(_client)
-        return _ok([asdict(a) for a in alerts])
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_active_alerts")
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@app.post("/tools/get_compliance_summary")
-def tool_compliance_summary():
-    """Return compliance readiness percentages."""
-    try:
-        result = get_compliance_summary(_client)
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_compliance_summary")
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@app.post("/tools/get_domain_overview")
-def tool_domain_overview():
-    """Return domain statistics."""
-    try:
-        result = _client.get_domain_overview()
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_domain_overview")
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@app.post("/tools/get_failed_logins")
-def tool_failed_logins():
-    """Return failed-login events."""
-    try:
-        result = _client.get_failed_logins()
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_failed_logins")
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@app.post("/tools/get_privilege_changes")
-def tool_privilege_changes():
-    """Return privilege-change events."""
-    try:
-        result = _client.get_privilege_changes()
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_privilege_changes")
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-@app.post("/tools/get_inactive_users")
-def tool_inactive_users():
-    """Return inactive users list."""
-    try:
-        result = _client.get_inactive_users()
-        return _ok(result)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Error in get_inactive_users")
-        return jsonify({"status": "error", "message": str(exc)}), 500
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    logger.info("Starting AD360 MCP server on port 8090 …")
-    app.run(host="0.0.0.0", port=8090, debug=False)
+    asyncio.run(main())
