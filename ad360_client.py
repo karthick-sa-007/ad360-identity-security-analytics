@@ -54,61 +54,129 @@ class AD360Client:
         return {}
 
     # ------------------------------------------------------------------
-    # Public API methods
+    # Public API methods — original
     # ------------------------------------------------------------------
 
     def get_failed_logins(self) -> list:
-        """Return failed-login events."""
         if self.use_mock:
             return mock_data.get_failed_logins()
         data = self._get("/api/v1/reports/failed-logins")
         return data.get("data", []) if isinstance(data, dict) else []
 
     def get_user_lockouts(self) -> list:
-        """Return user-lockout records."""
         if self.use_mock:
             return mock_data.get_user_lockouts()
         data = self._get("/api/v1/reports/user-lockouts")
         return data.get("data", []) if isinstance(data, dict) else []
 
     def get_inactive_users(self) -> list:
-        """Return inactive-user records."""
         if self.use_mock:
             return mock_data.get_inactive_users()
         data = self._get("/api/v1/reports/inactive-users")
         return data.get("data", []) if isinstance(data, dict) else []
 
     def get_privilege_changes(self) -> list:
-        """Return privilege-change events."""
         if self.use_mock:
             return mock_data.get_privilege_changes()
         data = self._get("/api/v1/reports/privilege-changes")
         return data.get("data", []) if isinstance(data, dict) else []
 
     def get_domain_overview(self) -> dict:
-        """Return domain-overview statistics."""
         if self.use_mock:
             return mock_data.get_domain_overview()
         data = self._get("/api/v1/domain/overview")
         return data if isinstance(data, dict) else {}
 
     def get_mfa_status(self) -> list:
-        """Return MFA-status records for all users."""
         if self.use_mock:
             return mock_data.get_mfa_status()
         data = self._get("/api/v1/users/mfa-status")
         return data.get("data", []) if isinstance(data, dict) else []
 
     def get_password_policy(self) -> dict:
-        """Return the active password policy."""
         if self.use_mock:
             return mock_data.get_password_policy()
         data = self._get("/api/v1/policy/password")
         return data if isinstance(data, dict) else {}
 
     def get_compliance_data(self) -> dict:
-        """Return compliance scores and check results."""
         if self.use_mock:
             return mock_data.get_compliance_data()
         data = self._get("/api/v1/compliance/summary")
+        return data if isinstance(data, dict) else {}
+
+    # ------------------------------------------------------------------
+    # Public API methods — new ITDR/iSOC capabilities
+    # ------------------------------------------------------------------
+
+    def get_impossible_travel_alerts(self) -> list:
+        if self.use_mock:
+            return mock_data.get_impossible_travel_alerts()
+        data = self._get("/api/v1/ueba/impossible-travel")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_after_hours_logins(self) -> list:
+        if self.use_mock:
+            return mock_data.get_after_hours_logins()
+        data = self._get("/api/v1/reports/after-hours-logins")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_service_account_abuse(self) -> list:
+        if self.use_mock:
+            return mock_data.get_service_account_abuse()
+        data = self._get("/api/v1/reports/service-account-abuse")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_lateral_movement(self) -> list:
+        if self.use_mock:
+            return mock_data.get_lateral_movement()
+        data = self._get("/api/v1/ueba/lateral-movement")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_shadow_admins(self) -> list:
+        if self.use_mock:
+            return mock_data.get_shadow_admins()
+        data = self._get("/api/v1/reports/shadow-admins")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_orphaned_accounts(self) -> list:
+        if self.use_mock:
+            return mock_data.get_orphaned_accounts()
+        data = self._get("/api/v1/reports/orphaned-accounts")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_privileged_account_inventory(self) -> list:
+        if self.use_mock:
+            return mock_data.get_privileged_account_inventory()
+        data = self._get("/api/v1/reports/privileged-accounts")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_joiners_movers_leavers(self) -> list:
+        if self.use_mock:
+            return mock_data.get_joiners_movers_leavers()
+        data = self._get("/api/v1/governance/jml")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_attack_timeline(self) -> list:
+        if self.use_mock:
+            return mock_data.get_attack_timeline()
+        data = self._get("/api/v1/ueba/attack-timeline")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_user_risk_profiles(self) -> list:
+        if self.use_mock:
+            return mock_data.get_user_risk_profiles()
+        data = self._get("/api/v1/ueba/user-risk-profiles")
+        return data.get("data", []) if isinstance(data, dict) else []
+
+    def get_executive_summary(self) -> dict:
+        if self.use_mock:
+            return mock_data.get_executive_summary()
+        data = self._get("/api/v1/executive/summary")
+        return data if isinstance(data, dict) else {}
+
+    def get_security_trends(self) -> dict:
+        if self.use_mock:
+            return mock_data.get_security_trends()
+        data = self._get("/api/v1/reports/security-trends")
         return data if isinstance(data, dict) else {}

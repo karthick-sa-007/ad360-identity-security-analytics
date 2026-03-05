@@ -1,137 +1,166 @@
-# 🔐 AD360 Identity Security Analytics
+# AD360 Identity Security Analytics — Enterprise iSOC
 
-A production-quality **Python** program that provides real-time identity security monitoring, risk analysis, and compliance tracking on top of **ManageEngine AD360** — with full mock-data support so it runs out-of-the-box without a live AD360 instance.
+An enterprise-grade **Identity Security Operations Center (iSOC)** built on top of ManageEngine AD360.  
+Provides real-time identity threat detection, compliance reporting, and AI-assisted investigation via MCP.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   dashboard.py (Streamlit UI)           │
-│   KPIs · Score Gauge · Alerts · Risk Users · Charts     │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        ▼               ▼               ▼
-  analytics.py      alerts.py      mcp_server.py
-  (scoring/trends)  (rule engine)  (Flask REST API :8090)
-        │               │
-        └───────┬───────┘
-                ▼
-          ad360_client.py
-          (REST client / mock dispatcher)
-                │
-        ┌───────┴────────┐
-        ▼                ▼
-   mock_data.py     AD360 REST API
-   (simulated data) (real instance)
-                │
-            config.py  ←  .env
+┌─────────────────────────────────────────────────────────────────┐
+│                        AD360 iSOC Platform                       │
+├──────────────┬──────────────┬──────────────┬────────────────────┤
+│  Streamlit   │  Flask REST  │  MCP Server  │  Report Generator  │
+│  Dashboard   │  API Server  │  (stdio)     │  (PDF via fpdf2)   │
+│ dashboard.py │api_server.py │mcp_server.py │report_generator.py │
+├──────────────┴──────────────┴──────────────┴────────────────────┤
+│                      Analytics Engine (analytics.py)             │
+│   ITDR Score · Attack Patterns · MITRE Coverage · Zero Trust     │
+├─────────────────────────────────────────────────────────────────┤
+│                    Alerts Engine (alerts.py)                     │
+│              25+ rules · MITRE ATT&CK · Auto-remediation         │
+├─────────────────────────────────────────────────────────────────┤
+│                   AD360 Client (ad360_client.py)                 │
+│          Mock Data ←→ Live AD360 REST API (config-driven)        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Features
+## Quick Start
 
-- 🎯 **Security Score** — weighted 0-100 score with letter grade (A-F)
-- ⚠️ **High-Risk User Detection** — correlates failed logins, lockouts, and privilege changes
-- 🚨 **Alert Engine** — 7 rules across Critical / High / Medium / Low severities with actionable remediation steps
-- 📋 **Compliance Tracking** — GDPR, HIPAA, and PCI-DSS readiness percentages
-- 📈 **30-Day Trends** — time-series charts for failed logins and lockouts
-- 🏢 **Domain Overview** — user distribution pie chart and admin vs regular bar chart
-- 🔌 **MCP REST API** — 8 JSON endpoints for integration with other tools (port 8090)
-- 🧪 **Mock Data Mode** — works out-of-the-box without a real AD360 instance
-
----
-
-## Prerequisites
-
-- Python 3.9 or later
-- pip
-
----
-
-## Installation
+### 1. Install Dependencies
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/karthick-sa-007/ad360-identity-security-analytics.git
-cd ad360-identity-security-analytics
-
-# 2. (Optional) Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
 pip install -r requirements.txt
 ```
 
----
+### 2. Configure Environment
 
-## Running the Dashboard
+```bash
+cp .env.example .env
+# Edit .env with your AD360 URL, token, and organisation settings
+```
+
+### 3. Run the Dashboard
 
 ```bash
 streamlit run dashboard.py
 ```
 
-Open your browser at **http://localhost:8501**.
+### 4. Run the REST API Server
 
----
+```bash
+python api_server.py
+# API available at http://localhost:5000/api/v1/
+```
 
-## Running the MCP Server
+### 5. Run the MCP Server (for AI assistants)
 
 ```bash
 python mcp_server.py
 ```
 
-The Flask server starts on **http://localhost:8090**.
+---
+
+## Dashboard Tabs
+
+| Tab | Audience | Key Features |
+|-----|----------|-------------|
+| �� Executive Summary | CISO | Health score gauge, KPIs, top risks, compliance radar, 90-day trends |
+| 🚨 Threat Detection | SOC Analyst | Active alerts (MITRE-mapped), attack patterns, impossible travel, after-hours heatmap, attack timeline |
+| 👤 Identity Governance | IT Admin | JML table, orphaned accounts, privileged inventory, shadow admins |
+| 📋 Compliance & Audit | GRC Team | 7-framework scorecard, radar chart, per-check drill-downs, PDF export |
+| 🔍 User Risk Profiles | Security Analyst | Search, top-10 high-risk users, risk histogram, department heatmap |
 
 ---
 
-## Connecting to a Real AD360 Instance
+## Connecting to Real AD360
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-2. Edit `.env` and set your real values:
-   ```
-   AD360_BASE_URL=https://your-ad360-instance:8082
-   AD360_AUTH_TOKEN=your_token_here
-   USE_MOCK_DATA=false
-   ALERT_EMAIL=admin@yourcompany.com
-   ```
-3. Start the dashboard or MCP server as normal.
+1. Set `USE_MOCK_DATA=false` in your `.env` file
+2. Set `AD360_BASE_URL` to your instance URL (e.g., `https://ad360.corp.local:8082`)
+3. Generate an API token in AD360: **Admin → API Configuration → Generate Token**
+4. Set `AD360_AUTH_TOKEN` to the generated token
+
+The client (`ad360_client.py`) will automatically switch from mock data to live REST API calls.
 
 ---
 
-## MCP Server API Reference
+## MCP Server Setup (AI Assistant Integration)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET    | `/tools` | List all available tools |
-| POST   | `/tools/get_identity_security_score` | Security score + grade |
-| POST   | `/tools/get_high_risk_users` | Top 10 risky users |
-| POST   | `/tools/get_active_alerts` | All triggered alerts |
-| POST   | `/tools/get_compliance_summary` | GDPR / HIPAA / PCI-DSS scores |
-| POST   | `/tools/get_domain_overview` | Domain user statistics |
-| POST   | `/tools/get_failed_logins` | Failed login events |
-| POST   | `/tools/get_privilege_changes` | Privilege change events |
-| POST   | `/tools/get_inactive_users` | Inactive user accounts |
+The MCP server exposes 15 identity-security tools to any MCP-compatible AI assistant (Claude, GitHub Copilot, etc.).
 
-### Example
+### Tools Available
 
-```bash
-# List tools
-curl http://localhost:8090/tools
+| Tool | Description |
+|------|-------------|
+| `get_identity_security_score` | ITDR score with 10-category breakdown |
+| `get_active_alerts` | All triggered alerts with MITRE IDs |
+| `get_high_risk_users` | Top 10 risk-scored users |
+| `get_impossible_travel_alerts` | Geographic anomaly detections |
+| `get_compliance_summary` | 7-framework compliance scores |
+| `get_domain_overview` | AD domain statistics |
+| `get_failed_logins` | Failed login events |
+| `get_lateral_movement` | Lateral movement detections |
+| `get_shadow_admins` | Indirect admin path analysis |
+| `get_orphaned_accounts` | Accounts without active managers |
+| `get_privileged_inventory` | Privileged account inventory |
+| `get_jml_status` | Joiner/Mover/Leaver status |
+| `get_mitre_coverage` | MITRE ATT&CK technique mapping |
+| `get_zero_trust_score` | Zero Trust pillar scores |
+| `get_executive_summary` | CISO KPI dashboard |
 
-# Get security score
-curl -X POST http://localhost:8090/tools/get_identity_security_score
+### Claude Desktop Configuration
 
-# Get active alerts
-curl -X POST http://localhost:8090/tools/get_active_alerts
+Add to `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "ad360-isoc": {
+      "command": "python",
+      "args": ["/path/to/mcp_server.py"],
+      "env": {
+        "USE_MOCK_DATA": "true"
+      }
+    }
+  }
+}
 ```
+
+---
+
+## Compliance Frameworks
+
+| Framework | Focus Area | Checks |
+|-----------|-----------|--------|
+| GDPR | Data Privacy (EU) | 12 checks |
+| HIPAA | Healthcare Data (US) | 10 checks |
+| SOX | Financial Controls | 8 checks |
+| PCI DSS | Payment Card Security | 10 checks |
+| ISO 27001 | Information Security Management | 15 checks |
+| NIST 800-53 | Federal Security Controls | 12 checks |
+| CIS AD | Active Directory Hardening | 20 checks |
+
+---
+
+## MITRE ATT&CK Coverage
+
+The platform maps threats to the following MITRE ATT&CK techniques:
+
+| Technique | ID | Tactic |
+|-----------|-----|--------|
+| Brute Force | T1110 | Credential Access |
+| Password Spraying | T1110.003 | Credential Access |
+| Credential Stuffing | T1110.004 | Credential Access |
+| Valid Accounts | T1078 | Initial Access |
+| Lateral Movement (RDP) | T1021.001 | Lateral Movement |
+| Pass-the-Hash | T1550.002 | Lateral Movement |
+| Account Manipulation | T1098 | Persistence |
+| Modify Authentication Process | T1556 | Credential Access |
+| GPO Modification | T1484.001 | Defense Evasion |
+| Password Policy Discovery | T1201 | Discovery |
 
 ---
 
@@ -139,36 +168,39 @@ curl -X POST http://localhost:8090/tools/get_active_alerts
 
 ```
 ad360-identity-security-analytics/
-├── README.md             ← This file
-├── requirements.txt      ← Python dependencies
-├── .env.example          ← Environment variable template
-├── config.py             ← Centralised configuration
-├── mock_data.py          ← Simulated AD360 data generators
-├── ad360_client.py       ← AD360 REST API client
-├── analytics.py          ← Scoring, risk, compliance, trend engines
-├── alerts.py             ← Alert rules and evaluation engine
-├── mcp_server.py         ← Flask MCP-compatible REST API server
-└── dashboard.py          ← Streamlit interactive dashboard
+├── dashboard.py          # Streamlit iSOC dashboard (5 tabs)
+├── mcp_server.py         # MCP server (15 tools, stdio transport)
+├── api_server.py         # Flask REST API (28 endpoints)
+├── ad360_client.py       # AD360 REST API client
+├── analytics.py          # ITDR analytics engine
+├── alerts.py             # 25+ alert rules engine
+├── mock_data.py          # Enterprise mock data (1200 users)
+├── report_generator.py   # PDF report generation (fpdf2)
+├── config.py             # Centralized configuration
+├── requirements.txt      # Python dependencies
+├── .env.example          # Environment variable template
+└── README.md             # This file
 ```
 
 ---
 
-## Screenshots
+## Risk Categories & Weights
 
-> _Coming soon — run `streamlit run dashboard.py` to see the live dashboard._
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m "Add my feature"`
-4. Push to the branch: `git push origin feature/my-feature`
-5. Open a Pull Request
+| Category | Weight | Description |
+|----------|--------|-------------|
+| Failed Logins | 15% | Authentication failure events |
+| MFA Violations | 15% | Admin accounts without MFA |
+| Impossible Travel | 15% | Geographic authentication anomalies |
+| Service Account Abuse | 10% | Service account misuse |
+| Lockouts | 10% | Account lockout events |
+| Inactive Users | 10% | Dormant account risk |
+| Privilege Changes | 10% | Unauthorized privilege escalation |
+| Lateral Movement | 5% | Internal network traversal |
+| After-Hours Logins | 5% | Out-of-hours access anomalies |
+| Shadow Admins | 5% | Indirect administrative control |
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see LICENSE file for details.
