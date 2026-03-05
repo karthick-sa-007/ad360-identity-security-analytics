@@ -455,12 +455,12 @@ class AlertsEngine:
             ),
 
             AlertRule(
-                name="Low: User Inactive 30–60 Days",
+                name="Low: User Inactive 30-60 Days",
                 severity="Low",
                 condition=lambda c: any(
                     30 <= u.get("days_inactive", 0) <= 60 for u in c.get_inactive_users()
                 ),
-                message="Users with 30–60 days of inactivity detected. Proactive review is recommended.",
+                message="Users with 30-60 days of inactivity detected. Proactive review is recommended.",
                 remediation=[
                     "Notify managers of users approaching the 60-day inactivity threshold.",
                     "Confirm whether users are on authorised leave or have left the organisation.",

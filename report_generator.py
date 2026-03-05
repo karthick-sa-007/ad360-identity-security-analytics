@@ -2,6 +2,18 @@ from datetime import date
 from fpdf import FPDF
 
 
+def _safe(text: str) -> str:
+    """Replace non-latin-1 characters with ASCII equivalents for fpdf2 core fonts."""
+    replacements = {
+        "\u2013": "-", "\u2014": "-", "\u2018": "'", "\u2019": "'",
+        "\u201c": '"', "\u201d": '"', "\u2022": "*", "\u2026": "...",
+        "\u2192": "->", "\u2190": "<-", "\u00b7": ".", "\u00a0": " ",
+    }
+    for src, dst in replacements.items():
+        text = text.replace(src, dst)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def _get_attr(obj, key, default=""):
     if isinstance(obj, dict):
         return obj.get(key, default)
@@ -14,7 +26,7 @@ def _add_header(pdf: FPDF, title: str):
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 14)
     pdf.set_xy(10, 5)
-    pdf.cell(0, 10, title, ln=True)
+    pdf.cell(0, 10, _safe(title), ln=True)
     pdf.set_text_color(0, 0, 0)
     pdf.ln(8)
 
@@ -22,27 +34,27 @@ def _add_header(pdf: FPDF, title: str):
 def _add_section_title(pdf: FPDF, title: str):
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_fill_color(220, 230, 255)
-    pdf.cell(0, 8, title, ln=True, fill=True)
+    pdf.cell(0, 8, _safe(title), ln=True, fill=True)
     pdf.ln(2)
 
 
 def _add_kv(pdf: FPDF, label: str, value: str):
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(70, 7, label + ":", ln=False)
+    pdf.cell(70, 7, _safe(label + ":"), ln=False)
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 7, str(value), ln=True)
+    pdf.cell(0, 7, _safe(str(value)), ln=True)
 
 
 def _add_table(pdf: FPDF, headers: list, rows: list, col_widths: list):
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_fill_color(200, 210, 240)
     for i, h in enumerate(headers):
-        pdf.cell(col_widths[i], 8, h, border=1, fill=True)
+        pdf.cell(col_widths[i], 8, _safe(str(h)), border=1, fill=True)
     pdf.ln()
     pdf.set_font("Helvetica", "", 9)
     for row in rows:
         for i, cell in enumerate(row):
-            pdf.cell(col_widths[i], 7, str(cell), border=1)
+            pdf.cell(col_widths[i], 7, _safe(str(cell)), border=1)
         pdf.ln()
     pdf.ln(3)
 
@@ -85,7 +97,7 @@ def generate_executive_report(data: dict) -> bytes:
     risks = ex.get("top_3_risks", [])
     pdf.set_font("Helvetica", "", 10)
     for i, risk in enumerate(risks[:3], 1):
-        pdf.cell(0, 7, f"  {i}. {risk}", ln=True)
+        pdf.cell(0, 7, _safe(f"  {i}. {risk}"), ln=True)
     pdf.ln(3)
 
     # --- Page 2: Threat Summary ---
@@ -130,15 +142,19 @@ def generate_executive_report(data: dict) -> bytes:
             seen.append(remediation)
             pdf.set_font("Helvetica", "B", 10)
             alert_name = _get_attr(a, "name", "Alert")
-            pdf.cell(0, 7, f"{counter}. [{alert_name}]", ln=True)
+            pdf.cell(0, 7, _safe(f"{counter}. [{alert_name}]"), ln=True)
             pdf.set_font("Helvetica", "", 10)
-            pdf.multi_cell(0, 6, f"   {remediation}")
+            if isinstance(remediation, list):
+                for step in remediation:
+                    pdf.cell(0, 6, _safe(f"   - {str(step)[:100]}"), ln=True)
+            else:
+                pdf.cell(0, 6, _safe(f"   {str(remediation)[:100]}"), ln=True)
             pdf.ln(1)
             counter += 1
 
     if counter == 1:
         pdf.set_font("Helvetica", "I", 10)
-        pdf.cell(0, 7, "  No specific recommendations at this time.", ln=True)
+        pdf.cell(0, 7, _safe("  No specific recommendations at this time."), ln=True)
 
     return bytes(pdf.output())
 
@@ -155,13 +171,13 @@ def generate_compliance_report(data: dict) -> bytes:
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 24)
     pdf.set_xy(0, 80)
-    pdf.cell(210, 15, "AD360 Identity Security", align="C", ln=True)
-    pdf.cell(210, 15, "Compliance Report", align="C", ln=True)
+    pdf.cell(210, 15, _safe("AD360 Identity Security"), align="C", ln=True)
+    pdf.cell(210, 15, _safe("Compliance Report"), align="C", ln=True)
     pdf.ln(10)
     pdf.set_font("Helvetica", "", 14)
     ex = data.get("exec_summary", {})
-    pdf.cell(210, 10, ex.get("org_name", "Organization"), align="C", ln=True)
-    pdf.cell(210, 10, str(ex.get("report_date", str(date.today()))), align="C", ln=True)
+    pdf.cell(210, 10, _safe(ex.get("org_name", "Organization")), align="C", ln=True)
+    pdf.cell(210, 10, _safe(str(ex.get("report_date", str(date.today())))), align="C", ln=True)
     pdf.set_text_color(0, 0, 0)
 
     # --- Compliance Scorecard ---
